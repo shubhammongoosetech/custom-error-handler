@@ -1,4 +1,6 @@
-async generateGameLobbyUrl(req: Request, res: Response) {
+
+  // Qtech Casino
+  async generateGameLobbyUrl(req: Request, res: Response) {
     const { userId } = req.params;
     if (userId) {
       try {
@@ -13,7 +15,6 @@ async generateGameLobbyUrl(req: Request, res: Response) {
       return res.status(400).json({ message: 'UserId is required' });
     }
   }
-
 
   async verifySession(req: Request, res: Response, next: NextFunction) {
     try {
@@ -43,6 +44,22 @@ async generateGameLobbyUrl(req: Request, res: Response) {
     }
   }
 
+
+  async getBalanceByQTech(req: Request, res: Response) {
+
+    const { playerId } = req.params;
+    const { gameId } = req.query;
+    if (!playerId) {
+      return res.status(400).json({
+        code: 'REQUEST_DECLINED',
+        message: 'General error. If request could not be processed.',
+      });
+    }
+    console.log("verify balance", playerId);
+    const result = await userModel.getBalanceByQTech(playerId);
+    return res.status(200).json(result);
+
+  }
 
   async casinoQTechTransactions(req: Request, res: Response, next: NextFunction) {
 
@@ -91,4 +108,107 @@ async generateGameLobbyUrl(req: Request, res: Response) {
 
   }
 
+  async qTechTtransactionsRollback(req: Request, res: Response, next: NextFunction) {
 
+    try {
+
+      const data: CasinoTransactionRollBackPayload = { ...req.body };
+
+      console.log("data", data);
+      if (!Number(data.playerId)) {
+        throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'The player account is blocked.' });
+      }
+      const walletSession = req.headers['wallet-session'] as string;
+      if (!walletSession) {
+        throw new BadRequestException({ code: 'INVALID_TOKEN', message: 'Missing, invalid or expired player (wallet) session token.' });
+      }
+
+
+      const result = await userModel.rollback({
+        txnId: data.txnId,
+        betId: data.betId as string,
+        playerId: data.playerId,
+        roundId: data.roundId,
+        amount: data.amount,
+        currency: data.currency,
+        gameId: data.gameId,
+        created: data.created,
+        walletSessionId: walletSession
+      });
+
+      return res.status(200).json(result);
+
+    } catch (error) {
+
+      console.log("error while placing bet", error);
+      next(error);
+
+    }
+
+  }
+
+  async bonusRewards(req: Request, res: Response, next: NextFunction) {
+
+    try {
+      const data: CasinoBonusReward = { ...req.body };
+
+      if (!Number(data.playerId)) {
+        throw new ForbiddenException({ code: 'ACCOUNT_BLOCKED', message: 'The player account is blocked.' });
+      }
+      if (!data.rewardType) {
+        throw new BadRequestException({
+          code: 'REQUEST_DECLINED',
+          message: 'General error. If request could not be processed.'
+        });
+      }
+
+      console.log("bonus data", data);
+      const result = await userModel.bonusRewards({
+        txnId: data.txnId,
+        rewardType: data.rewardType,
+        rewardTitle: data.rewardTitle,
+        playerId: data.playerId,
+        amount: data.amount,
+        currency: data.currency,
+        created: data.created
+      });
+
+      return res.status(200).json(result);
+    } catch (error) {
+      console.log("errrorrrr", error);
+      next(error);
+    }
+
+  }
+
+  async getRoundHistory(req: Request, res: Response, next: NextFunction) {
+    try {
+      const query: unknown = req.query;
+
+      if (query && typeof query === "object") {
+        const args = { ...query } as casinoHistoryPayload;
+        console.log('search', args);
+        // console.log("search status",args.)
+        const response = await userModel.getRoundHistory(
+          args.uid || args._uid,
+          args.search,
+          args.limit || 10,
+          args.offset || 0,
+          args.startdate,
+          args.enddate
+        );
+        return res.status(200).json({ response, message: "success" });
+      } else {
+        return res.status(400).end();
+      }
+    } catch (error) {
+      console.error('Error fetching round history:', error);
+      next(error);
+    }
+  }
+}
+
+
+
+
+export default UserController;
